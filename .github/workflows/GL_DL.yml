@@ -1,0 +1,74 @@
+# This is a basic workflow to help you get started with Actions 
+
+name: GL_DL
+
+# Controls when the workflow will run
+on:
+  #push: 
+  #  branches: [ "main" ]
+  # Triggers the workflow on pull request events for the "main" branch
+  #pull_request_target: 
+  #  branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab sd 
+  workflow_dispatch:
+    inputs:
+      secret-history:
+          type: boolean
+          description: Include git history ?
+          default: true
+
+ 
+env:
+  INCLUDE_GIT_HISTORY: ${{ github.event.inputs.secret-history }}
+
+jobs:
+  # This workflow contains a single job called "xygeni_security_scan"
+  gl_scan:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    # ref: "refs/pull/${{ github.event.number }}/merge"
+    # ref: ${{ github.event.pull_request.head.sha }}
+  
+    steps:
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+        name: Checking out PR code
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          # Number of commits to fetch. 0 indicates all history for all branches and tags.
+          # Default: 1
+          fetch-depth: '0'
+          # This is to get the PR code instead of the repo code
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+        name: Checking out main code
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        with:
+          # Number of commits to fetch. 0 indicates all history for all branches and tags..
+          # Default: 1
+          fetch-depth: '0'
+
+
+
+      # Runs a set of commands using the runners shell 
+      - name: Download and execute GL 
+        run: |
+          set +e
+          echo Downloading GL ....
+
+          #curl -o /tmp/gitleaks.tmp  https://github.com/zricethezav/gitleaks/releases/download/v8.16.1/gitleaks_8.16.1_linux_x64.tar.gz
+          wget -O /tmp/gitleaks.tmp https://github.com/zricethezav/gitleaks/releases/download/v8.16.1/gitleaks_8.16.1_linux_x64.tar.gz
+          mkdir /tmp/gitleaks-8.16.1
+          /usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /tmp/gitleaks-8.16.1 -f /tmp/gitleaks.tmp
+          #/usr/bin/tar --posix -z -cf cache.tgz -P -C /home/runner/work/elasticsearch/elasticsearch --files-from manifest.txt
+          SECONDS=0
+          /usr/bin/time --verbose /tmp/gitleaks-8.16.1/gitleaks detect --redact -v --exit-code=2 --report-format=sarif --report-path=results.sarif --log-level=debug
+          duration=$SECONDS
+          echo "seconds $duration"
+          echo "$((duration / 60)) minutes and $((duration % 60)) seconds elapsed."
