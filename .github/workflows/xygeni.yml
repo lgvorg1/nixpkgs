@@ -101,6 +101,11 @@ jobs:
       - name: Download Xygeni Scanner 
         run: |
           echo Downloading Xygeni Scanner ....
+          #echo "===================================================================="
+          #sudo lshw -short
+          #lscpu
+          #echo "===================="
+          #git ls-files | xargs wc -l
 
           #curl -L https://get.xygeni.io/latest/scanner/install.sh | /bin/bash -s -- -u $XY_USERNAME -p $XY_PASSWORD -s $XY_URL -d ${GITHUB_WORKSPACE}/scanner 
           curl -L https://get.xygeni.io/latest/scanner/install.sh | /bin/bash -s -- -u $XY_USERNAME -p $XY_PASSWORD -s $XY_URL -d ${GITHUB_WORKSPACE}/scanner 
@@ -123,7 +128,7 @@ jobs:
             echo "Executing over history"
             echo "***********************"
             SECONDS=0
-            /usr/bin/time --verbose ${GITHUB_WORKSPACE}/scanner/xygeni scan  --never-fail  -f none --include-collaborators --run="secrets" --secrets-mode=history --no-conf-download -n ${{ env.XY_PRJ_NAME }} --dir ${GITHUB_WORKSPACE} -e **/scanner/**
+            /usr/bin/time --verbose ${GITHUB_WORKSPACE}/scanner/xygeni scan  --never-fail  -f sarif -o results.gl.sarif.${{ github.event.repository.name }}.history --include-collaborators --run="secrets" --secrets-mode=history --no-conf-download -n ${{ env.XY_PRJ_NAME }} --dir ${GITHUB_WORKSPACE} -e **/scanner/**
             duration=$SECONDS
             echo Number of commits $(git log | grep "Author:" | wc -l)
           else
@@ -131,7 +136,7 @@ jobs:
             echo "Not including history"
             echo "***********************"
             SECONDS=0
-            /usr/bin/time --verbose ${GITHUB_WORKSPACE}/scanner/xygeni scan  --never-fail  -f none --include-collaborators --run="secrets"  --no-conf-download -n ${{ env.XY_PRJ_NAME }} --dir ${GITHUB_WORKSPACE} -e **/scanner/**
+            /usr/bin/time --verbose ${GITHUB_WORKSPACE}/scanner/xygeni scan  --never-fail  -f sarif -o results.gl.sarif.${{ github.event.repository.name }}.nogit --include-collaborators --run="secrets"  --no-conf-download -n ${{ env.XY_PRJ_NAME }} --dir ${GITHUB_WORKSPACE} -e **/scanner/**
             duration=$SECONDS
           fi
           echo "===================================================================="
@@ -143,6 +148,34 @@ jobs:
           
           export LOC=$(grep -rIl '' | xargs wc -l | head -n -1 | awk '{total +=$1} END{print total}' )
           echo LOC/sec $(($LOC / $duration))
-          
+
         env:
           GITHUB_PAT: ${{ secrets.GH_PAT }}
+
+      - name: Send mail from INTERNAL 
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # Specify connection via URL (replaces server_address, server_port, secure, 
+          # username and password)
+          #
+          # Format:
+          #
+          #  * smtp://user:password@server:port
+          #  * smtp+starttls://user:password@server:port
+          connection_url: ${{secrets.MAIL_CONNECTION}}
+          # Required mail server address if not connection_url:
+          server_address: smtp.gmail.com
+          # Server port, default 25:
+          server_port: 465
+          # Optional whether this connection use TLS (default is true if server_port is 465)
+          secure: true
+          # Required mail subject:
+          subject: Secrets [tool=Xygeni] [repo=${{ github.event.repository.name }}] [history=${{ github.event.inputs.secret-history }}]
+          # Required recipients' addresses:
+          to: luis.garcia@xygeni.io
+          # Required sender full name (address can be skipped):
+          from: Luke Skywalker # <user@example.com>
+          # Optional plain body:  
+          body: INTERNAL Secret .\n Build job of ${{github.repository}} completed successfully!
+          attachments: results.*
